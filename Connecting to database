@@ -1,0 +1,294 @@
+<?php
+session_start();
+// This is where the connection to the database takes place
+
+try
+{
+    $pdo = new PDO('mysql:host=localhost; dbname=jsmarcha_aws', '', '');
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->exec('SET NAMES "utf8"');
+}
+
+catch (PDOException $e)
+{
+        $error = 'Unable to connect to the database:' . $e->getMessage();
+        include 'error.php';
+        exit();
+}
+
+// login area
+
+    if (isset($_POST["action"]) and $_POST["action"] == "Login")
+    {
+       
+         $user = $_POST['username'];
+         $pass = $_POST['password'];
+         
+         $result = $pdo->query('SELECT UserID, Username, Password FROM Account WHERE Username = "' . $user . '"');
+         
+         if ($result->rowCount() > 0)
+         {
+             
+             foreach ($result as $row)
+             {
+               $array[] = array('id' => $row['UserID'], 'username' => $row['Username'], 'password' => $row['Password']);
+             }
+               
+             foreach($array as $column)
+               {
+                 if (password_verify($_POST['password'], $column['password']) == 1)
+                 {
+                 
+                     $_SESSION['id'] = $column['id'];
+                     header('Location: http://voltafy.co.uk/natvolt');
+                     break;
+                 }
+                 
+                 else
+                 {
+                     $error = 'password is incorrect, please try again';
+                      break;
+                 }
+             }
+         }
+         else
+         {
+             $error = 'User does not exist';
+         }
+          
+    }
+    
+    
+    if (isset($_POST["sign"]) and $_POST["sign"] == "Signup")
+    {
+        $result = $pdo->query('SELECT Username, Email FROM Account WHERE Username = "' . $_POST['susername'] . '" OR Email = "' . $_POST['suemail'] . '"');
+        if ($result->rowCount() == 0)
+        {
+         try //server attempts to run query
+	        {
+				$sql = 'INSERT INTO Account SET
+                Name= :suname,
+				Email = :suemail,
+				Username = :susername,
+				Password = :supassword';
+
+				$s = $pdo->prepare($sql);
+				$s->bindValue(':suname', $_POST['suname']);
+				$s->bindValue(':suemail', $_POST['suemail']);
+				$s->bindValue(':susername', $_POST['susername']);
+				$s->bindValue(':supassword', password_hash($_POST['supassword'], PASSWORD_DEFAULT));
+				$s->execute();
+				header('Refresh: 0');
+            }
+	
+			catch (PDOException $e)//opens error page if query fails
+			{
+				$pdo->errorMessage([$e]);
+			//	$output = 'Error fetching ideas:' .  $e->getMessage(); 
+				$error = 'this does not work';
+			}   
+        }
+        else 
+        {
+            $error = 'username or email is already taken';
+        }
+    }
+    
+    if (isset($_POST['discuss']) and $_POST['discuss'] == "comments")
+    {
+ 
+         try //server attempts to run query
+	        {
+				$sql = 'INSERT INTO Comments SET
+				Comment = :comment,
+				Page = :page,
+				UserID = :userid';
+
+				$s = $pdo->prepare($sql);
+				$s->bindValue(':comment', $_POST['Comment']);
+				$s->bindValue(':page', $_POST['Page']);
+				$s->bindValue(':userid', $_SESSION['id']);
+				$s->execute();
+				header('Refresh: 0');
+            }
+            
+        catch (PDOException $e)//opens error page if query fails
+        {
+            $output = 'failure' . $e->getMessage();
+            include 'error.php';
+            exit();
+        }
+    }
+    
+    function viewcomments()
+    {
+        if (!isset($_SESSION['page']))
+        {
+          $_SESSION['page'] = '1.1.1';   
+        }
+        
+            $result = $GLOBALS['pdo']->query(
+            'SELECT c.Comment, c.CommentID, a.Username, c.UserID
+            FROM Comments c 
+            JOIN Account a ON a.UserID = c.UserID
+            WHERE Page = "' . $_SESSION['page'] . '" 
+            ');
+        
+        foreach($result as $row)
+        {
+           $comments[] = array('id' => $row['CommentID'], 'comment' => $row['Comment'], 'username' => $row['Username'], 'userid' => $row['UserID']); 
+        }
+        
+        return $comments;
+    }
+    
+     function topiccomments()
+    {
+            $result = $GLOBALS['pdo']->query(
+            'SELECT c.Comment, c.CommentID, a.Username, c.UserID
+            FROM Comments c 
+            JOIN Account a ON a.UserID = c.UserID
+            WHERE Page = "' . $_GET['topic'] . '" 
+            ');
+        
+        foreach($result as $row)
+        {
+           $comments[] = array('id' => $row['CommentID'], 'comment' => $row['Comment'], 'username' => $row['Username'], 'userid' => $row['UserID']); 
+        }
+        
+        return $comments;
+    }
+
+    if (isset($_POST['action']) and $_POST['action'] == "resettutorial")
+    {
+        $_SESSION['page'] = '1.1.1';
+        header('Refresh: 1');
+    }
+    
+    if (isset($_POST['deletecomment']) and $_POST['deletecomment'] == "delete")
+    {
+                    try
+                {
+                    $sql = 'DELETE FROM Comments WHERE CommentID = :id';
+                    $s = $pdo->prepare($sql);
+                    $s->bindValue(':id', $_POST['id']);
+                    $s->execute();
+                }
+                    catch(PDOException $e)
+                {
+                    $error = 'Error deleting comment.';
+                    include 'error.php';
+                    exit();
+                }
+                
+    }
+    
+    if (isset($_POST['searchbttn']) and $_POST['searchbttn'] == "fire")
+    {
+        header('Location:http://voltafy.co.uk/natvolt/searchresult.php?result=' . $_POST['Search']);
+    }
+    
+    function searchMe()
+    {
+        try
+        {
+            $searchresult = $GLOBALS['pdo']->query('SELECT keyword, link FROM search WHERE keyword LIKE "' . $_GET['result'] . '"');
+        }
+        catch (PDOException $e)//opens error page if query fails
+        {
+            $output = 'failure' . $e->getMessage();
+            include 'error.php';
+            exit();
+        }
+        
+        if ($searchresult->rowCount() != 0)
+        {
+                foreach($searchresult as $searchrow)
+            {
+                $test[] = array('keyword' => $searchrow['keyword'], 'link' => $searchrow['link']);
+            }
+        }
+        
+        else
+        {
+            $test = 0;
+        }
+        
+        
+        return $test;
+    }
+    
+    if (isset($_POST['delete'])and $_POST['delete'] == "delacct")
+            {
+  
+                session_destroy(); 
+                    try
+                {
+                    $sql = 'DELETE FROM Account WHERE UserID = :id';
+                    $s = $pdo->prepare($sql);
+                    $s->bindValue(':id', $_SESSION['id']);
+                    $s->execute();
+                }
+                    catch(PDOException $e)
+                {
+                    $error = 'Error deleting account.';
+                    include 'error.php';
+                    exit();
+                }
+                
+                header('Location: http://voltafy.co.uk/natvolt/account.php');
+            }
+            
+        
+       function edituserdata()
+    {
+        try
+        {
+            $userresult = $GLOBALS['pdo']->query('SELECT Name, Email, Username, Password FROM Account WHERE UserID =' . $_SESSION['id']);
+        }
+        catch (PDOException $e)//opens error page if query fails
+        {
+            $output = 'failure' . $e->getMessage();
+            include 'error.php';
+            exit();
+        }
+        
+        foreach($userresult as $result)
+        {
+            $userView[] = array('name' => $result['Name'], 'email' => $result['Email'], 'username' => $result['Username'], 'password' => $result['Password']);
+        }
+        return $userView;
+    }
+    
+    
+     if (isset($_POST['update'])and $_POST['update'] == "confirmEdit")
+            {
+                    try
+                {
+                    $updater = 'UPDATE Account
+                    SET 
+                    Name = :name, 
+                    Email = :email, 
+                    Username = :username, 
+                    Password = :password
+                    WHERE UserID =' . $_SESSION['id'];
+                    
+                    $s = $pdo->prepare($updater);
+                    $s->bindValue(':name', $_POST['Name']);
+                    $s->bindValue(':email', $_POST['Email']);
+                    $s->bindValue(':username', $_POST['Username']);
+                    $s->bindValue(':password', $_POST['Password']);
+                    $s->execute();
+                }
+                    catch(PDOException $e)
+                {
+                    $error = 'Error updating details.';
+                    include 'error.php';
+                    exit();
+                }
+                
+                
+                
+            }
+        
+?>
